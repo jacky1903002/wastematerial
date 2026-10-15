@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>餘料重量管理系統</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- 登入畫面 (未登入時顯示) -->
+    <div id="auth-container" class="fixed inset-0 bg-slate-900/70 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
+            <div class="text-center mb-6">
+                <div class="bg-blue-600 text-white w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl shadow-lg">
+                    <i class="fa-solid fa-industry"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-900">餘料重量管理系統</h2>
+                <p class="text-sm text-slate-500 mt-1">請登入 Firebase 帳號以繼續操作</p>
+            </div>
+            
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">電子郵件</label>
+                    <input type="email" id="login-email" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">密碼</label>
+                    <input type="password" id="login-password" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm">
+                </div>
+                <div id="auth-error" class="text-red-500 text-xs hidden"></div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition shadow-md">
+                    登入系統
+                </button>
+            </form>
+            <div class="mt-4 text-center">
+                <button id="toggle-signup-mode" class="text-xs text-blue-600 hover:underline">沒有帳號？點此註冊新帳號</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主系統介面 (登入後顯示) -->
+    <div id="app-container" class="hidden flex-1 flex flex-col">
+        <!-- 頂部導覽列 -->
+        <header class="bg-slate-900 text-white shadow-md">
+            <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <i class="fa-solid fa-cubes text-blue-400 text-xl"></i>
+                    <h1 class="text-lg font-bold">餘料重量管理系統</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span id="user-email-display" class="text-xs text-slate-300 bg-slate-800 px-3 py-1.5 rounded-full"></span>
+                    <button id="logout-btn" class="bg-red-600/80 hover:bg-red-600 text-white text-xs px-3 py-1.5 rounded-lg transition">
+                        <i class="fa-solid fa-right-from-bracket mr-1"></i> 登出
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主要內容區 -->
+        <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
+            
+            <!-- 工作表標籤頁控制列 -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                <div id="sheets-tabs" class="flex flex-wrap items-center gap-2">
+                    <!-- 動態產生工作表標籤 -->
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="openAddSheetModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-lg font-medium transition shadow-sm">
+                        <i class="fa-solid fa-plus mr-1"></i> 新增工作表
+                    </button>
+                    <button onclick="openRenameSheetModal()" class="bg-amber-600 hover:bg-amber-700 text-white text-xs px-3 py-2 rounded-lg font-medium transition shadow-sm">
+                        <i class="fa-solid fa-pen mr-1"></i> 更名
+                    </button>
+                    <button onclick="duplicateCurrentSheet()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-2 rounded-lg font-medium transition shadow-sm">
+                        <i class="fa-solid fa-copy mr-1"></i> 複製工作表
+                    </button>
+                    <button onclick="deleteCurrentSheet()" class="bg-rose-600 hover:bg-rose-700 text-white text-xs px-3 py-2 rounded-lg font-medium transition shadow-sm">
+                        <i class="fa-solid fa-trash mr-1"></i> 刪除工作表
+                    </button>
+                </div>
+            </div>
+
+            <!-- 資料輸入表單 -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-sm font-bold text-slate-700 mb-3"><i class="fa-solid fa-pen-to-square text-blue-600 mr-1.5"></i> 新增記錄 (<span id="current-sheet-title" class="text-blue-600"></span>)</h2>
+                <form id="record-form" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">日期</label>
+                        <input type="date" id="rec-date" required class="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">時段</label>
+                        <select id="rec-time" class="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="上午">上午</option>
+                            <option value="下午">下午</option>
+                            <option value="晚上">晚上</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">材質</label>
+                        <select id="rec-material" class="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="W">W</option>
+                            <option value="M">M</option>
+                            <option value="Ta">Ta</option>
+                            <option value="Al">Al</option>
+                            <option value="Stainless">Stainless</option>
+                            <option value="BN">BN</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">淨重_已扣箱重_KG</label>
+                        <input type="number" step="0.01" id="rec-weight" required placeholder="0.00" class="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">紀錄者</label>
+                        <input type="text" id="rec-recorder" required placeholder="姓名/代號" class="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">備註</label>
+                        <div class="flex space-x-2">
+                            <input type="text" id="rec-remark" placeholder="選填" class="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-4 py-2 rounded-lg font-medium transition whitespace-nowrap shadow-sm">
+                                新增列
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 資料表格檢視 (所有欄位鎖定，無法直接在儲存格更改內容) -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-5 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                    <h3 class="text-sm font-bold text-slate-700"><i class="fa-solid fa-table text-blue-600 mr-1.5"></i> 紀錄資料清單 (欄位已鎖定唯讀)</h3>
+                    <span id="record-count" class="text-xs text-slate-500 bg-slate-200 px-2.5 py-1 rounded-full">共 0 筆記錄</span>
+                </div>
+                <div class="overflow-x-auto max-h-96">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="bg-slate-100 text-slate-600 sticky top-0 border-b border-slate-200">
+                            <tr>
+                                <th class="p-3 font-semibold">日期</th>
+                                <th class="p-3 font-semibold">時段</th>
+                                <th class="p-3 font-semibold">材質</th>
+                                <th class="p-3 font-semibold text-right">淨重_已扣箱重_KG</th>
+                                <th class="p-3 font-semibold">紀錄者</th>
+                                <th class="p-3 font-semibold">備註</th>
+                                <th class="p-3 font-semibold text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="records-table-body" class="divide-y divide-slate-200">
+                            <!-- 動態資料列 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 3大分析圖表區 -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 圖表 1 -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-sm font-bold text-slate-800">1. 單月各材質及對應重量</h3>
+                        <button onclick="openFilterModal(1)" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded border border-slate-300">
+                            <i class="fa-solid fa-filter mr-1"></i> 勾選材質
+                        </button>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-xs text-slate-500 mr-2">選擇月份:</label>
+                        <input type="month" id="chart1-month" class="text-xs border border-slate-300 rounded px-2 py-1">
+                    </div>
+                    <div class="relative flex-1 min-h-[250px]">
+                        <canvas id="chart1"></canvas>
+                    </div>
+                </div>
+
+                <!-- 圖表 2 -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-sm font-bold text-slate-800">2. 各月各材質及對應重量</h3>
+                        <button onclick="openFilterModal(2)" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded border border-slate-300">
+                            <i class="fa-solid fa-filter mr-1"></i> 勾選材質
+                        </button>
+                    </div>
+                    <div class="mb-3 text-xs text-slate-500">跨月份綜合比較分析</div>
+                    <div class="relative flex-1 min-h-[250px]">
+                        <canvas id="chart2"></canvas>
+                    </div>
+                </div>
+
+                <!-- 圖表 3 -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-sm font-bold text-slate-800">3. 逐月材質重量累積趨勢表</h3>
+                        <button onclick="openFilterModal(3)" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded border border-slate-300">
+                            <i class="fa-solid fa-filter mr-1"></i> 勾選材質
+                        </button>
+                    </div>
+                    <div class="mb-3 text-xs text-slate-500">時間序列累積重量變化</div>
+                    <div class="relative flex-1 min-h-[250px]">
+                        <canvas id="chart3"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- 材質過濾彈跳視窗 -->
+    <div id="filter-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <h3 class="text-base font-bold text-slate-800 mb-4">勾選要顯示的材質</h3>
+            <div id="material-checkboxes" class="space-y-2 mb-6">
+                <!-- 動態勾選項 -->
+            </div>
+            <div class="flex justify-end space-x-2">
+                <button onclick="closeFilterModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs rounded-lg font-medium">取消</button>
+                <button onclick="applyMaterialFilter()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg font-medium">套用篩選</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增/更名工作表彈跳視窗 -->
+    <div id="sheet-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <h3 id="sheet-modal-title" class="text-base font-bold text-slate-800 mb-4">新增工作表</h3>
+            <input type="text" id="sheet-name-input" placeholder="請輸入工作表名稱" class="w-full text-xs px-3 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none mb-6">
+            <div class="flex justify-end space-x-2">
+                <button onclick="closeSheetModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs rounded-lg font-medium">取消</button>
+                <button id="sheet-modal-confirm" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg font-medium">確認</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs & Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getDatabase, ref, set, get, push, remove, update, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCNjI8Gq0ZNkzOtQgN4RmGSTRb0X53awig",
+            authDomain: "wastemateria-77487.firebaseapp.com",
+            projectId: "wastemateria-77487",
+            storageBucket: "wastemateria-77487.firebasestorage.app",
+            messagingSenderId: "380147168387",
+            appId: "1:380147168387:web:1a89a520b90b3461b817b6",
+            measurementId: "G-PW8M02NSDE"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+
+        // 全域變數
+        let currentUser = null;
+        let currentSheet = "預設工作表";
+        let sheetsData = {};
+        let allMaterials = ["W", "M", "Ta", "Al", "Stainless", "BN", "其他"];
+        
+        // 圖表與篩選狀態
+        let chart1Instance = null;
+        let chart2Instance = null;
+        let chart3Instance = null;
+        let activeFilterChart = null;
+        let materialFilters = {
+            1: [...allMaterials],
+            2: [...allMaterials],
+            3: [...allMaterials]
+        };
+
+        // 登入模式切換 (登入/註冊)
+        let isSignupMode = false;
+        document.getElementById('toggle-signup-mode').addEventListener('click', () => {
+            isSignupMode = !isSignupMode;
+            const title = document.querySelector('#auth-container h2');
+            const btn = document.querySelector('#login-form button[type="submit"]');
+            const toggleBtn = document.getElementById('toggle-signup-mode');
+            if (isSignupMode) {
+                title.textContent = "註冊新帳號";
+                btn.textContent = "建立帳號並登入";
+                toggleBtn.textContent = "已有帳號？點此登入";
+            } else {
+                title.textContent = "餘料重量管理系統";
+                btn.textContent = "登入系統";
+                toggleBtn.textContent = "沒有帳號？點此註冊新帳號";
+            }
+        });
+
+        // 認證處理
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            const errDiv = document.getElementById('auth-error');
+            errDiv.classList.add('hidden');
+
+            try {
+                if (isSignupMode) {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                } else {
+                    await signInWithEmailAndPassword(auth, email, password);
+                }
+            } catch (error) {
+                errDiv.textContent = error.message;
+                errDiv.classList.remove('hidden');
+            }
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            signOut(auth);
+        });
+
+        // 監聽 Auth 狀態
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('auth-container').classList.add('hidden');
+                document.getElementById('app-container').classList.remove('hidden');
+                document.getElementById('user-email-display').textContent = user.email;
+                initApp();
+            } else {
+                currentUser = null;
+                document.getElementById('auth-container').classList.remove('hidden');
+                document.getElementById('app-container').classList.add('hidden');
+            }
+        });
+
+        // 初始化應用
+        function initApp() {
+            // 設定預設日期為今天
+            document.getElementById('rec-date').valueAsDate = new Date();
+            document.getElementById('chart1-month').value = new Date().toISOString().slice(0, 7);
+            
+            // 從 Firebase 載入所有資料
+            const dbRef = ref(db, 'scrap_system');
+            onValue(dbRef, (snapshot) => {
+                const data = snapshot.val();
+                if (data && data.sheets) {
+                    sheetsData = data.sheets;
+                } else {
+                    // 初始化預設工作表
+                    sheetsData = {
+                        "預設工作表": {}
+                    };
+                    set(ref(db, 'scrap_system/sheets'), sheetsData);
+                }
+                
+                // 確保當前工作表存在
+                if (!sheetsData[currentSheet]) {
+                    currentSheet = Object.keys(sheetsData)[0] || "預設工作表";
+                }
+                
+                renderSheetsTabs();
+                renderCurrentSheetData();
+                updateCharts();
+            });
+        }
+
+        // 渲染工作表標籤頁
+        function renderSheetsTabs() {
+            const container = document.getElementById('sheets-tabs');
+            container.innerHTML = '';
+            Object.keys(sheetsData).forEach(sheetName => {
+                const btn = document.createElement('button');
+                btn.className = `text-xs px-3.5 py-2 rounded-lg font-medium transition shadow-sm ${sheetName === currentSheet ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`;
+                btn.textContent = sheetName;
+                btn.onclick = () => {
+                    currentSheet = sheetName;
+                    renderSheetsTabs();
+                    renderCurrentSheetData();
+                    updateCharts();
+                };
+                container.appendChild(btn);
+            });
+            document.getElementById('current-sheet-title').textContent = currentSheet;
+        }
+
+        // 新增記錄表單送出
+        document.getElementById('record-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const date = document.getElementById('rec-date').value;
+            const timeSlot = document.getElementById('rec-time').value;
+            const material = document.getElementById('rec-material').value;
+            const weight = parseFloat(document.getElementById('rec-weight').value);
+            const recorder = document.getElementById('rec-recorder').value;
+            const remark = document.getElementById('rec-remark').value || "";
+
+            const newRow = {
+                date,
+                timeSlot,
+                material,
+                weight,
+                recorder,
+                remark,
+                timestamp: Date.now()
+            };
+
+            const newRowRef = push(ref(db, `scrap_system/sheets/${currentSheet}/rows`));
+            set(newRowRef, newRow).then(() => {
+                document.getElementById('rec-weight').value = '';
+                document.getElementById('rec-remark').value = '';
+            });
+        });
+
+        // 渲染當前工作表資料表格 (唯讀鎖定)
+        function renderCurrentSheetData() {
+            const tbody = document.getElementById('records-table-body');
+            tbody.innerHTML = '';
+            const sheetRows = sheetsData[currentSheet]?.rows || {};
+            const rowKeys = Object.keys(sheetRows);
+
+            document.getElementById('record-count').textContent = `共 ${rowKeys.length} 筆記錄`;
+
+            if (rowKeys.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-slate-400">目前尚無記錄資料</td></tr>`;
+                return;
+            }
+
+            // 依時間排序
+            rowKeys.sort((a, b) => sheetRows[b].timestamp - sheetRows[a].timestamp);
+
+            rowKeys.forEach(key => {
+                const row = sheetRows[key];
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
+                tr.innerHTML = `
+                    <td class="p-3 text-slate-700">${row.date}</td>
+                    <td class="p-3 text-slate-700">${row.timeSlot}</td>
+                    <td class="p-3"><span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-semibold">${row.material}</span></td>
+                    <td class="p-3 text-right font-mono font-medium text-slate-900">${row.weight.toFixed(2)}</td>
+                    <td class="p-3 text-slate-700">${row.recorder}</td>
+                    <td class="p-3 text-slate-500">${row.remark || '-'}</td>
+                    <td class="p-3 text-center">
+                        <button onclick="deleteRow('${key}')" class="text-rose-500 hover:text-rose-700 p-1" title="刪除列">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 刪除列
+        window.deleteRow = function(rowKey) {
+            if (confirm("確定要刪除這筆記錄嗎？")) {
+                remove(ref(db, `scrap_system/sheets/${currentSheet}/rows/${rowKey}`));
+            }
+        };
+
+        // 工作表管理互動
+        let sheetModalMode = 'add'; // 'add' or 'rename'
+
+        window.openAddSheetModal = function() {
+            sheetModalMode = 'add';
+            document.getElementById('sheet-modal-title').textContent = "新增工作表";
+            document.getElementById('sheet-name-input').value = "";
+            document.getElementById('sheet-modal').classList.remove('hidden');
+        };
+
+        window.openRenameSheetModal = function() {
+            sheetModalMode = 'rename';
+            document.getElementById('sheet-modal-title').textContent = "更名工作表";
+            document.getElementById('sheet-name-input').value = currentSheet;
+            document.getElementById('sheet-modal').classList.remove('hidden');
+        };
+
+        window.closeSheetModal = function() {
+            document.getElementById('sheet-modal').classList.add('hidden');
+        };
+
+        document.getElementById('sheet-modal-confirm').addEventListener('click', () => {
+            const newName = document.getElementById('sheet-name-input').value.trim();
+            if (!newName) {
+                alert("工作表名稱不能為空");
+                return;
+            }
+
+            if (sheetModalMode === 'add') {
+                if (sheetsData[newName]) {
+                    alert("工作表名稱已存在");
+                    return;
+                }
+                set(ref(db, `scrap_system/sheets/${newName}`), { rows: {} }).then(() => {
+                    currentSheet = newName;
+                    closeSheetModal();
+                });
+            } else if (sheetModalMode === 'rename') {
+                if (newName === currentSheet) {
+                    closeSheetModal();
+                    return;
+                }
+                if (sheetsData[newName]) {
+                    alert("工作表名稱已存在");
+                    return;
+                }
+                const oldData = sheetsData[currentSheet];
+                set(ref(db, `scrap_system/sheets/${newName}`), oldData).then(() => {
+                    remove(ref(db, `scrap_system/sheets/${currentSheet}`)).then(() => {
+                        currentSheet = newName;
+                        closeSheetModal();
+                    });
+                });
+            }
+        });
+
+        window.duplicateCurrentSheet = function() {
+            const newName = prompt("請輸入複製後的全新工作表名稱:", currentSheet + " (複製)");
+            if (!newName) return;
+            if (sheetsData[newName]) {
+                alert("工作表名稱已存在");
+                return;
+            }
+            const currentData = sheetsData[currentSheet] || { rows: {} };
+            set(ref(db, `scrap_system/sheets/${newName}`), currentData).then(() => {
+                currentSheet = newName;
+            });
+        };
+
+        window.deleteCurrentSheet = function() {
+            if (Object.keys(sheetsData).length <= 1) {
+                alert("必須保留至少一個工作表！");
+                return;
+            }
+            if (confirm(`確定要刪除工作表 「${currentSheet}」 及其所有資料嗎？`)) {
+                remove(ref(db, `scrap_system/sheets/${currentSheet}`)).then(() => {
+                    currentSheet = Object.keys(sheetsData)[0];
+                });
+            }
+        };
+
+        // 材質篩選彈跳視窗
+        window.openFilterModal = function(chartNum) {
+            activeFilterChart = chartNum;
+            const container = document.getElementById('material-checkboxes');
+            container.innerHTML = '';
+            allMaterials.forEach(mat => {
+                const isChecked = materialFilters[chartNum].includes(mat);
+                const div = document.createElement('label');
+                div.className = "flex items-center space-x-2 text-xs cursor-pointer py-1";
+                div.innerHTML = `
+                    <input type="checkbox" value="${mat}" ${isChecked ? 'checked' : ''} class="rounded text-blue-600 focus:ring-blue-500 w-4 h-4">
+                    <span class="font-medium text-slate-700">${mat}</span>
+                `;
+                container.appendChild(div);
+            });
+            document.getElementById('filter-modal').classList.remove('hidden');
+        };
+
+        window.closeFilterModal = function() {
+            document.getElementById('filter-modal').classList.add('hidden');
+        };
+
+        window.applyMaterialFilter = function() {
+            const checkboxes = document.querySelectorAll('#material-checkboxes input[type="checkbox"]');
+            const selected = [];
+            checkboxes.forEach(cb => {
+                if (cb.checked) selected.push(cb.value);
+            });
+            materialFilters[activeFilterChart] = selected;
+            closeFilterModal();
+            updateCharts();
+        };
+
+        document.getElementById('chart1-month').addEventListener('change', updateCharts);
+
+        // 更新 3 大圖表
+        function updateCharts() {
+            const rowsObj = sheetsData[currentSheet]?.rows || {};
+            const allRows = Object.values(rowsObj);
+
+            // ==================== 圖表 1: 單月各材質及對應重量 ====================
+            const selectedMonth = document.getElementById('chart1-month').value; // YYYY-MM
+            const filteredMat1 = materialFilters[1];
+            
+            const matWeights1 = {};
+            filteredMat1.forEach(m => matWeights1[m] = 0);
+
+            allRows.forEach(r => {
+                if (r.date && r.date.startsWith(selectedMonth)) {
+                    if (filteredMat1.includes(r.material)) {
+                        matWeights1[r.material] = (matWeights1[r.material] || 0) + (r.weight || 0);
+                    }
+                }
+            });
+
+            const ctx1 = document.getElementById('chart1').getContext('2d');
+            if (chart1Instance) chart1Instance.destroy();
+            chart1Instance = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: filteredMat1,
+                    datasets: [{
+                        label: '淨重 (KG)',
+                        data: filteredMat1.map(m => matWeights1[m]),
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+
+            // ==================== 圖表 2: 各月各材質及對應重量 ====================
+            const filteredMat2 = materialFilters[2];
+            const monthlyData = {}; // { 'YYYY-MM': { 'W': weight, ... } }
+            const monthsSet = new Set();
+
+            allRows.forEach(r => {
+                if (!r.date) return;
+                const mMonth = r.date.slice(0, 7);
+                monthsSet.add(mMonth);
+                if (!monthlyData[mMonth]) monthlyData[mMonth] = {};
+                if (filteredMat2.includes(r.material)) {
+                    monthlyData[mMonth][r.material] = (monthlyData[mMonth][r.material] || 0) + (r.weight || 0);
+                }
+            });
+
+            const sortedMonths = Array.from(monthsSet).sort();
+            const datasets2 = filteredMat2.map((mat, idx) => {
+                const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'];
+                return {
+                    label: mat,
+                    data: sortedMonths.map(mon => monthlyData[mon][mat] || 0),
+                    backgroundColor: colors[idx % colors.length],
+                    borderRadius: 4
+                };
+            });
+
+            const ctx2 = document.getElementById('chart2').getContext('2d');
+            if (chart2Instance) chart2Instance.destroy();
+            chart2Instance = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: sortedMonths,
+                    datasets: datasets2
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+                }
+            });
+
+            // ==================== 圖表 3: 逐月材質重量累積趨勢表 ====================
+            const filteredMat3 = materialFilters[3];
+            // 計算每個材質在各月份的累積重量
+            const cumulativeData = {}; // { mat: { month: cumulativeWeight } }
+            filteredMat3.forEach(mat => {
+                cumulativeData[mat] = {};
+            });
+
+            // 先計算每月各材質總量
+            const monthlyMatTotals = {};
+            sortedMonths.forEach(mon => {
+                monthlyMatTotals[mon] = {};
+                filteredMat3.forEach(mat => monthlyMatTotals[mon][mat] = 0);
+            });
+
+            allRows.forEach(r => {
+                if (!r.date) return;
+                const mon = r.date.slice(0, 7);
+                if (filteredMat3.includes(r.material) && monthlyMatTotals[mon]) {
+                    monthlyMatTotals[mon][r.material] = (monthlyMatTotals[mon][r.material] || 0) + (r.weight || 0);
+                }
+            });
+
+            // 計算累積
+            filteredMat3.forEach(mat => {
+                let runningTotal = 0;
+                sortedMonths.forEach(mon => {
+                    runningTotal += (monthlyMatTotals[mon][mat] || 0);
+                    cumulativeData[mat][mon] = runningTotal;
+                });
+            });
+
+            const datasets3 = filteredMat3.map((mat, idx) => {
+                const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'];
+                return {
+                    label: mat,
+                    data: sortedMonths.map(mon => cumulativeData[mat][mon] || 0),
+                    borderColor: colors[idx % colors.length],
+                    backgroundColor: colors[idx % colors.length],
+                    fill: false,
+                    tension: 0.1
+                };
+            });
+
+            const ctx3 = document.getElementById('chart3').getContext('2d');
+            if (chart3Instance) chart3Instance.destroy();
+            chart3Instance = new Chart(ctx3, {
+                type: 'line',
+                data: {
+                    labels: sortedMonths,
+                    datasets: datasets3
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
